@@ -15,20 +15,6 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  migrate:
-    build: .
-    command: ["alembic", "upgrade", "head"]
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: gen_media
-      WEBHOOK_SECRET: dev-webhook-secret
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   api:
     build: .
     ports:
@@ -45,8 +31,8 @@ services:
       WEBHOOK_SECRET: dev-webhook-secret
       WATCHDOG_INTERVAL_SECONDS: "1"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       provider-alpha:
         condition: service_started
       provider-beta:
@@ -54,9 +40,9 @@ services:
 
   provider-alpha:
     build: .
+    entrypoint: ["uvicorn"]
     command:
       [
-        "uvicorn",
         "app:app",
         "--app-dir",
         "providers",
@@ -78,9 +64,9 @@ services:
 
   provider-beta:
     build: .
+    entrypoint: ["uvicorn"]
     command:
       [
-        "uvicorn",
         "app:app",
         "--app-dir",
         "providers",

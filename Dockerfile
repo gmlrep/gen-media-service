@@ -9,12 +9,14 @@ COPY src ./src
 COPY migrations ./migrations
 COPY alembic.ini ./
 COPY providers ./providers
+COPY scripts ./scripts
 
-RUN uv sync --no-dev
+RUN uv sync --no-dev \
+    && chmod +x /app/scripts/migrate.sh /app/scripts/entrypoint.sh
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 
-CMD ["uvicorn", "gen_media_service.__main__:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
