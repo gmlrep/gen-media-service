@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gen_media
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gen_media"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: gen_media
+      WEBHOOK_SECRET: dev-webhook-secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: gen_media
+      ALPHA_BASE_URL: http://provider-alpha:8101
+      BETA_BASE_URL: http://provider-beta:8102
+      PROVIDER_TIMEOUT: "60"
+      WEBHOOK_SECRET: dev-webhook-secret
+      WATCHDOG_INTERVAL_SECONDS: "1"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      provider-alpha:
+        condition: service_started
+      provider-beta:
+        condition: service_started
+
+  provider-alpha:
+    build: .
+    command:
+      [
+        "uvicorn",
+        "app:app",
+        "--app-dir",
+        "providers",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8101",
+      ]
+    environment:
+      PROVIDER_NAME: alpha
+      PORT: "8101"
+      WEBHOOK_URL: http://api:8000/webhooks/providers/alpha
+      WEBHOOK_SECRET: dev-webhook-secret
+      WEBHOOK_DELAY_MIN: "2"
+      WEBHOOK_DELAY_MAX: "5"
+      FAILURE_RATE: "0"
+    ports:
+      - "8101:8101"
+
+  provider-beta:
+    build: .
+    command:
+      [
+        "uvicorn",
+        "app:app",
+        "--app-dir",
+        "providers",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8102",
+      ]
+    environment:
+      PROVIDER_NAME: beta
+      PORT: "8102"
+      WEBHOOK_URL: http://api:8000/webhooks/providers/beta
+      WEBHOOK_SECRET: dev-webhook-secret
+      WEBHOOK_DELAY_MIN: "2"
+      WEBHOOK_DELAY_MAX: "5"
+      FAILURE_RATE: "0"
+    ports:
+      - "8102:8102"
+
+volumes:
+  pgdata:
