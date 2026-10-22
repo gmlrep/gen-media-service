@@ -48,9 +48,7 @@ async def test_first_leg_failure_completes_on_second_with_two_attempts(
         },
         separators=(",", ":"),
     ).encode()
-    resp = await client.post(
-        "/webhooks/providers/beta", content=body, headers=sign(body)
-    )
+    resp = await client.post("/webhooks/providers/beta", content=body, headers=sign(body))
     assert resp.status_code == 200
 
     final = await client.get(f"/tasks/{task_id}")

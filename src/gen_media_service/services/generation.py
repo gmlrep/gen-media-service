@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,9 +50,7 @@ class GenerationService(BaseService):
             if model is None:
                 raise ValidationError(f"Unknown model: {payload.model_slug}")
 
-            legs = [
-                leg for leg in model.legs if leg.max_ref_images >= len(payload.ref_images)
-            ]
+            legs = [leg for leg in model.legs if leg.max_ref_images >= len(payload.ref_images)]
             if not legs:
                 raise ValidationError("No provider leg accepts the given number of ref_images")
 
@@ -108,9 +106,7 @@ class GenerationService(BaseService):
                 raise NotFoundError(f"Task {task_id} not found")
             return self._to_task_read(task)
 
-    async def handle_provider_webhook(
-        self, provider_name: str, payload: ProviderWebhook
-    ) -> None:
+    async def handle_provider_webhook(self, provider_name: str, payload: ProviderWebhook) -> None:
         async with self.task_repository.session_factory() as session:
             found = await self.task_repository.get_by_external_id_for_update(
                 session, payload.external_id
@@ -148,9 +144,7 @@ class GenerationService(BaseService):
                 # Re-load attempt after claim (status already timeout)
                 for a in task.attempts:
                     if a.id == attempt.id:
-                        await self._advance_after_failure(
-                            session, task, a, error_type="technical"
-                        )
+                        await self._advance_after_failure(session, task, a, error_type="technical")
                         processed += 1
                         break
             return processed
@@ -189,7 +183,7 @@ class GenerationService(BaseService):
                     model_slug=task.model_slug,
                 )
             except ProviderError:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 attempt.status = "failed"
                 attempt.error_type = "technical"
                 attempt.finished_at = now
@@ -198,7 +192,7 @@ class GenerationService(BaseService):
                 after_moderation = False
                 continue
 
-            timeout_at = datetime.now(timezone.utc) + timedelta(
+            timeout_at = datetime.now(UTC) + timedelta(
                 seconds=self.settings.providers.PROVIDER_TIMEOUT
             )
             await self.task_repository.mark_attempt_waiting(
@@ -215,7 +209,7 @@ class GenerationService(BaseService):
         attempt: TaskAttempt,
         result_url: str | None,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         attempt.status = "succeeded"
         attempt.finished_at = now
         task.status = "completed"
@@ -229,7 +223,7 @@ class GenerationService(BaseService):
         attempt: TaskAttempt,
         error_type: str,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         attempt.status = "failed"
         attempt.error_type = error_type
         attempt.finished_at = now
@@ -255,9 +249,7 @@ class GenerationService(BaseService):
             await self._fail_task_and_refund(session, task)
             return
 
-        legs = [
-            leg for leg in model.legs if leg.max_ref_images >= len(task.ref_images or [])
-        ]
+        legs = [leg for leg in model.legs if leg.max_ref_images >= len(task.ref_images or [])]
         failed_idx = None
         for i, leg in enumerate(legs):
             if (
@@ -276,9 +268,7 @@ class GenerationService(BaseService):
             after_moderation=after_moderation,
         )
 
-    async def _fail_task_and_refund(
-        self, session: AsyncSession, task: GenerationTask
-    ) -> None:
+    async def _fail_task_and_refund(self, session: AsyncSession, task: GenerationTask) -> None:
         if task.status == "failed":
             return
         task.status = "failed"

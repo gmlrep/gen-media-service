@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -42,7 +42,7 @@ async def test_late_completed_after_watchdog_is_ignored(
         await session.execute(
             update(TaskAttempt)
             .where(TaskAttempt.external_id == external_id)
-            .values(timeout_at=datetime.now(timezone.utc) - timedelta(seconds=5))
+            .values(timeout_at=datetime.now(UTC) - timedelta(seconds=5))
         )
 
     service = app.state.container.generation_service()
@@ -70,9 +70,7 @@ async def test_late_completed_after_watchdog_is_ignored(
         },
         separators=(",", ":"),
     ).encode()
-    resp = await client.post(
-        "/webhooks/providers/alpha", content=body, headers=sign(body)
-    )
+    resp = await client.post("/webhooks/providers/alpha", content=body, headers=sign(body))
     assert resp.status_code == 200
 
     after_task = await client.get(f"/tasks/{task_id}")

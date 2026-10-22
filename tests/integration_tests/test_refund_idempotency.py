@@ -36,7 +36,9 @@ async def test_ten_concurrent_failed_webhooks_on_last_leg_refund_once(
 
     task = await client.get(f"/tasks/{task_id}")
     assert task.json()["status"] == "running"
-    assert any(a["provider"] == "beta" and a["status"] == "waiting" for a in task.json()["attempts"])
+    assert any(
+        a["provider"] == "beta" and a["status"] == "waiting" for a in task.json()["attempts"]
+    )
 
     before = await client.get(f"/users/{funded_user}/balance")
     balance_before = before.json()["balance"]
@@ -50,10 +52,7 @@ async def test_ten_concurrent_failed_webhooks_on_last_leg_refund_once(
     headers = sign(body)
 
     results = await asyncio.gather(
-        *[
-            client.post("/webhooks/providers/beta", content=body, headers=headers)
-            for _ in range(10)
-        ]
+        *[client.post("/webhooks/providers/beta", content=body, headers=headers) for _ in range(10)]
     )
     assert all(r.status_code == 200 for r in results)
 

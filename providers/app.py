@@ -44,9 +44,7 @@ _background_tasks: set[asyncio.Task] = set()
 
 
 def _sign(body: bytes) -> str:
-    return hmac.new(
-        config.WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
+    return hmac.new(config.WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
 
 async def _send_webhook(payload: dict) -> None:

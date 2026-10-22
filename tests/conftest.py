@@ -92,14 +92,11 @@ async def client(app) -> AsyncIterator[AsyncClient]:
 
 
 @pytest_asyncio.fixture
-async def funded_user(
-    client: AsyncClient, sign: Callable[[bytes], dict[str, str]]
-) -> int:
+async def funded_user(client: AsyncClient, sign: Callable[[bytes], dict[str, str]]) -> int:
     user_id = 10_000 + (uuid.uuid4().int % 90_000)
     payment_id = f"seed-{uuid.uuid4()}"
     body = (
-        f'{{"payment_id":"{payment_id}","user_id":{user_id},'
-        f'"tokens":1000,"status":"succeeded"}}'
+        f'{{"payment_id":"{payment_id}","user_id":{user_id},"tokens":1000,"status":"succeeded"}}'
     ).encode()
     resp = await client.post("/webhooks/payments", content=body, headers=sign(body))
     assert resp.status_code == 200, resp.text

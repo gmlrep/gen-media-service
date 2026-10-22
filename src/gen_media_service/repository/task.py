@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,9 +46,7 @@ class TaskRepository(BaseRepository[GenerationTask]):
         await session.flush()
         return task
 
-    async def get_with_attempts(
-        self, session: AsyncSession, task_id: int
-    ) -> GenerationTask | None:
+    async def get_with_attempts(self, session: AsyncSession, task_id: int) -> GenerationTask | None:
         result = await session.execute(
             select(GenerationTask)
             .where(GenerationTask.id == task_id)
@@ -96,7 +94,7 @@ class TaskRepository(BaseRepository[GenerationTask]):
         leg_priority: int,
         timeout_at: datetime | None = None,
     ) -> TaskAttempt:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         attempt = TaskAttempt(
             task_id=task_id,
             provider=provider,
@@ -124,7 +122,7 @@ class TaskRepository(BaseRepository[GenerationTask]):
     async def claim_timed_out_attempts(
         self, session: AsyncSession, limit: int = 20
     ) -> list[TaskAttempt]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Claim waiting attempts past timeout using SKIP LOCKED (safe with 4 workers).
         result = await session.execute(
             select(TaskAttempt)

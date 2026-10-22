@@ -13,7 +13,7 @@ class GenerationTask(BaseModel):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     model_slug: Mapped[str] = mapped_column(String(64), nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    ref_images: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    ref_images: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     current_attempt_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     result_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

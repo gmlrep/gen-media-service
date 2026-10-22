@@ -25,15 +25,11 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=400, content={"detail": exc.message})
 
     @app.exception_handler(InsufficientTokensError)
-    async def insufficient_tokens_handler(
-        _: Request, exc: InsufficientTokensError
-    ) -> JSONResponse:
+    async def insufficient_tokens_handler(_: Request, exc: InsufficientTokensError) -> JSONResponse:
         return JSONResponse(status_code=402, content={"detail": exc.message})
 
     @app.exception_handler(TooManyActiveTasksError)
-    async def too_many_tasks_handler(
-        _: Request, exc: TooManyActiveTasksError
-    ) -> JSONResponse:
+    async def too_many_tasks_handler(_: Request, exc: TooManyActiveTasksError) -> JSONResponse:
         return JSONResponse(status_code=429, content={"detail": exc.message})
 
     @app.exception_handler(AppError)

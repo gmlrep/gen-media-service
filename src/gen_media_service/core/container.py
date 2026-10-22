@@ -1,7 +1,7 @@
 from dependency_injector import containers, providers
 
 from gen_media_service.adapters.http_provider import HttpProviderClient
-from gen_media_service.core.config import get_settings
+from gen_media_service.core.config import ProviderSettings, get_settings
 from gen_media_service.core.database import Database
 from gen_media_service.repository.catalog import CatalogRepository
 from gen_media_service.repository.ledger import LedgerRepository
@@ -15,7 +15,7 @@ def _db_url() -> str:
     return get_settings().database.db_url
 
 
-def _provider_settings():
+def _provider_settings() -> ProviderSettings:
     return get_settings().providers
 
 
@@ -33,18 +33,10 @@ class Container(containers.DeclarativeContainer):
 
     db = providers.Singleton(Database, db_url=providers.Callable(_db_url))
 
-    user_repository = providers.Factory(
-        UserRepository, session_factory=db.provided.session
-    )
-    ledger_repository = providers.Factory(
-        LedgerRepository, session_factory=db.provided.session
-    )
-    catalog_repository = providers.Factory(
-        CatalogRepository, session_factory=db.provided.session
-    )
-    task_repository = providers.Factory(
-        TaskRepository, session_factory=db.provided.session
-    )
+    user_repository = providers.Factory(UserRepository, session_factory=db.provided.session)
+    ledger_repository = providers.Factory(LedgerRepository, session_factory=db.provided.session)
+    catalog_repository = providers.Factory(CatalogRepository, session_factory=db.provided.session)
+    task_repository = providers.Factory(TaskRepository, session_factory=db.provided.session)
 
     provider_client = providers.Factory(
         HttpProviderClient, settings=providers.Callable(_provider_settings)

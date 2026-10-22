@@ -52,3 +52,10 @@ select = ["E", "F", "I", "UP"]
 python_version = "3.11"
 strict = true
 packages = ["gen_media_service"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "dependency_injector.*",
+]
+ignore_missing_imports = true
