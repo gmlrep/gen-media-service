@@ -1,35 +1,35 @@
 # gen-media-service
 
-Token-billed media generation API with provider failover (`alpha` → `beta`), an append-only ledger, and a multi-worker-safe timeout watchdog.
+Сервис генерации медиа со списанием токенов, failover провайдеров (`alpha` → `beta`), журналом операций и сторожем таймаутов, безопасным при нескольких воркерах.
 
-## Stack
+## Стек
 
 - Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, PostgreSQL
-- Layered layout (`api` → `services` → `repository` → `model`) with dependency-injector
-- Fake providers (`providers/app.py`) for alpha/beta
+- Слоистая архитектура (`api` → `services` → `repository` → `model`) и dependency-injector
+- Фейковые провайдеры (`providers/app.py`) для alpha и beta
 
-## Quick start
+## Быстрый старт
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-This starts:
+Поднимается:
 
-| Service | URL |
+| Сервис | URL |
 | --- | --- |
 | API (uvicorn `--workers 4`) | http://localhost:8000 |
-| Fake provider alpha | http://localhost:8101 |
-| Fake provider beta | http://localhost:8102 |
+| Фейковый провайдер alpha | http://localhost:8101 |
+| Фейковый провайдер beta | http://localhost:8102 |
 | Postgres | localhost:5432 |
 
-Health: `GET http://localhost:8000/health`
+Проверка: `GET http://localhost:8000/health`
 
-### Example flow
+### Пример сценария
 
 ```bash
-# Credit user 42 with 100 tokens (HMAC over raw body)
+# Начислить пользователю 42 сто токенов (HMAC по сырому телу)
 python - <<'PY'
 import hashlib, hmac, json, urllib.request
 secret = b"dev-webhook-secret"
@@ -52,92 +52,106 @@ curl -s -X POST http://localhost:8000/generate \
   -d '{"user_id":42,"model_slug":"image-fast","prompt":"a cat","ref_images":[]}' | jq
 ```
 
-## Migrations
+## Миграции
 
-Compose runs `alembic upgrade head` via the `migrate` service before the API starts.
+Entrypoint API перед uvicorn запускает [`scripts/migrate.sh`](scripts/migrate.sh): если `alembic current` уже показывает `(head)`, скрипт ничего не меняет; иначе выполняет `alembic upgrade head`.
 
-Locally (with Postgres up and `.env` set):
+Локально (Postgres запущен, заданы `.env` / `DB_*`):
 
 ```bash
 uv sync
+./scripts/migrate.sh
+# либо принудительно:
 uv run alembic upgrade head
 ```
 
-Add the next migration after changing models:
+Добавить следующую миграцию после изменения моделей:
 
 ```bash
-uv run alembic revision --autogenerate -m "describe why"
-uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "зачем меняем схему"
+./scripts/migrate.sh
 ```
 
-Initial revision `001` also seeds the catalog:
+Начальная ревизия `001` также засевает каталог:
 
-| Model | Price | Legs |
+| Модель | Цена | Ноги |
 | --- | --- | --- |
-| `image-fast` | 2 | alpha (≤4 refs) → beta (≤10) |
+| `image-fast` | 2 | alpha (≤4 реф.) → beta (≤10) |
 | `video-long` | 25 | beta (≤2) → alpha (≤1, `skip_on_moderation`) |
 
-## Tests
-
-Requires Postgres with migrations applied (compose is enough):
+## Линт и типы
 
 ```bash
-docker compose up -d postgres migrate
 uv sync
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src
+```
+
+## Тесты
+
+Нужен Postgres с применёнными миграциями (достаточно compose):
+
+```bash
+docker compose up -d postgres
+uv sync
+./scripts/migrate.sh
 uv run pytest -q
 ```
 
-Mandatory coverage:
+GitHub Actions (`.github/workflows/ci.yml`) на каждый push/PR запускает ruff, mypy и pytest против Postgres.
 
-1. 20 concurrent identical payment webhooks → one credit
-2. 10 concurrent `failed` webhooks on the last leg → one refund
-3. First leg fails → task finishes on second leg with two attempts
-4. Late `completed` after watchdog timeout → ignored (no result + refund)
+Обязательное покрытие:
 
-## Exactly-once money movement
+1. 20 одновременных одинаковых вебхуков оплаты → одно начисление
+2. 10 одновременных `failed` на последней ноге → один возврат
+3. Отказ первой ноги → завершение на второй, в истории две попытки
+4. Поздний `completed` после сторожа → игнорируется (нет и результата, и лишнего возврата)
 
-Every balance change is a row in `ledger_entry`. The user `balance` column is updated in the **same transaction** as the insert.
+## «Ровно один раз» для денег
 
-Uniqueness:
+Любое изменение баланса — строка в `ledger_entry`. Колонка `balance` у пользователя обновляется **в той же транзакции**, что и INSERT.
 
-| Kind | `external_ref` | Effect |
+Уникальность:
+
+| kind | `external_ref` | Эффект |
 | --- | --- | --- |
-| `payment` | `payment_id` | concurrent duplicates → `ON CONFLICT DO NOTHING` |
-| `charge` | `task_id` | one debit per generation |
-| `refund` | `task_id` | one credit back when all legs fail |
+| `payment` | `payment_id` | параллельные дубликаты → `ON CONFLICT DO NOTHING` |
+| `charge` | `task_id` | одно списание на задачу |
+| `refund` | `task_id` | один возврат, когда все ноги отказали |
 
-So “exactly once” is enforced by the database unique constraint `uq_ledger_kind_ref`, not by in-memory locks.
+«Ровно один раз» обеспечивает уникальный constraint БД `uq_ledger_kind_ref`, а не in-memory блокировки.
 
-## Crash mid-webhook
+## Падение процесса посреди вебхука
 
-If a worker dies after receiving a webhook but before commit, the provider (or payment system) can retry. Retries are safe:
+Если воркер упал после приёма вебхука, но до commit, провайдер (или платёжка) может повторить запрос. Повторы безопасны:
 
-- Payment: same `payment_id` cannot insert twice
-- Provider outcome: attempt must be `waiting`; after a committed transition (`failed` / `timeout` / `succeeded`) further webhooks are acknowledged and ignored
-- Refund: same `task_id` cannot refund twice
+- Оплата: тот же `payment_id` нельзя вставить дважды
+- Исход провайдера: принимается только попытка в статусе `waiting`; после зафиксированного перехода (`failed` / `timeout` / `succeeded`) повторные вебхуки отвечают 200 и игнорируются
+- Возврат: тот же `task_id` нельзя вернуть дважды
 
-## Rule 6 — late `completed` after watchdog
+## Правило 6 — поздний `completed` после сторожа
 
-When `PROVIDER_TIMEOUT` elapses, the watchdog claims the attempt with `SELECT … FOR UPDATE SKIP LOCKED`, marks it `timeout` (treated like `technical`), and advances to the next leg or performs the single refund.
+По истечении `PROVIDER_TIMEOUT` сторож забирает попытку через `SELECT … FOR UPDATE SKIP LOCKED`, помечает её `timeout` (как `technical`) и либо идёт на следующую ногу, либо делает единственный возврат.
 
-A later `completed` for that attempt’s `external_id` returns HTTP 200 but **does not** set `result_url` or change task status. Reason: the service already committed either a successor attempt or a refund; accepting the late success would give the user both a result and a refund. Financial correctness wins over a late provider success.
+Поздний `completed` по старому `external_id` возвращает HTTP 200, но **не** выставляет `result_url` и не меняет статус задачи. Уже зафиксирован переход на следующую попытку или возврат; принять поздний успех значило бы отдать и результат, и деньги. Финансовая корректность важнее опоздавшего успеха провайдера.
 
-## Multi-worker watchdog
+## Сторож при нескольких воркерах
 
-Each uvicorn worker runs the watchdog loop. Double-processing is prevented by claiming overdue rows with `FOR UPDATE SKIP LOCKED` — only one worker can claim a given attempt.
+Каждый процесс uvicorn крутит цикл сторожа. Двойная обработка исключается claim через `FOR UPDATE SKIP LOCKED` — одну попытку обрабатывает только один воркер.
 
-## Project layout
+## Структура проекта
 
 ```
 src/gen_media_service/
   api/endpoints/     # HTTP
-  services/          # billing + generation + failover
-  repository/        # persistence
+  services/          # биллинг, генерация, failover
+  repository/        # персистентность
   model/             # SQLAlchemy
-  adapters/          # provider HTTP client
-  infrastructure/    # watchdog
+  adapters/          # HTTP-клиент провайдеров
+  infrastructure/    # сторож
   core/              # config, DI, DB, lifespan
-providers/           # fake alpha/beta
+providers/           # фейковые alpha/beta
 migrations/          # Alembic
 tests/
 ```
