@@ -1,5 +1,5 @@
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from gen_media_service.core.config import Settings
 from gen_media_service.core.container import Container
@@ -40,9 +40,7 @@ async def payment_webhook(
     request: Request,
     service: PaymentService = Depends(Provide[Container.payment_service]),
     settings: Settings = Depends(Provide[Container.settings]),
-    x_signature: str | None = Header(default=None, alias="X-Signature"),
 ) -> dict[str, str]:
-    _ = x_signature
     body = await _require_signature(request, settings)
     payload = PaymentWebhook.model_validate_json(body)
     await service.apply_payment(payload)
